@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# Application Data
+gemini_profile/
+session.json
+*.log
+
+# Build
+build/
+dist/
+*.spec
