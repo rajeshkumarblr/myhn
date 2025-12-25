@@ -12,7 +12,7 @@ Browser clutter and context switching kill developer focus. Keeping your AI assi
 - **Persistent Login**: Maintains your session so you don't have to log in every time.
 - **Custom User Agents**: Optimized for the best Gemini experience.
 - **Lightweight**: Built with Python and PyQt6, avoiding the overhead of Electron.
-- **Distraction-Free**: Clean interface with custom context menus and tab management.
+- **Distraction-Free**: Clean interface with custom context menus, tab management, and auto-hiding of the "My Stuff" sidebar for pure focus.
 - **Session Restoration**: Remembers your open tabs and active chat.
 
 ## Installation

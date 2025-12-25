@@ -2,7 +2,7 @@ import sys
 import os
 import json
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QTabWidget, 
-                             QToolBar, QMessageBox)
+                             QToolBar, QMessageBox, QSizePolicy)
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import (QWebEngineProfile, QWebEnginePage, 
                                    QWebEngineSettings, QWebEngineScript)
@@ -10,13 +10,11 @@ from PyQt6.QtGui import QAction, QIcon, QKeySequence
 from PyQt6.QtCore import QUrl, Qt, QTimer
 
 def get_base_path():
-    # Returns the base path for resources (bundled or source)
     if getattr(sys, 'frozen', False):
         return sys._MEIPASS
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def get_user_data_path():
-    # Returns the path for persistent user data (next to exe or in source root)
     if getattr(sys, 'frozen', False):
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -162,7 +160,7 @@ class GeminiBrowser(QMainWindow):
         self.title_timer.start(1000) 
 
     def inject_scripts(self):
-        # Context Menu Click Tracker
+        # 1. Click Tracker
         click_js = """
         (function() {
             document.addEventListener("contextmenu", function(e){
@@ -177,39 +175,66 @@ class GeminiBrowser(QMainWindow):
         script1.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentCreation)
         self.profile.scripts().insert(script1)
 
+        # 2. Hide "My Stuff" (SAFE VERSION - Uses textContent)
+        # We switched from .innerHTML to .appendChild(document.createTextNode) 
+        # to satisfy Google's TrustedHTML security policy.
+        css_js = """
+        (function() {
+            var style = document.createElement('style');
+            var css = `
+                nav[aria-label*="Recent"], 
+                div[data-test-id="recent-chats-list"] { 
+                    display: none !important; 
+                }
+                div:has(> span:contains("My stuff")) {
+                    display: none !important;
+                }
+            `;
+            style.appendChild(document.createTextNode(css));
+            document.head.appendChild(style);
+        })();
+        """
+        script2 = QWebEngineScript()
+        script2.setSourceCode(css_js)
+        script2.setName("HideMyStuff")
+        script2.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)
+        script2.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentReady)
+        self.profile.scripts().insert(script2)
+
     def add_new_tab(self, url="https://gemini.google.com", title=None):
         browser = GeminiView(self)
+        
+        # --- FIX FOR JARRING RESIZE ---
+        # Resize to full window size IMMEDIATELY, before being added to tabs.
+        # This prevents the "small rectangle" animation glitch.
+        browser.resize(self.size())
+        browser.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
         page = GeminiPage(self.profile, self)
         
         browser.settings().setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanAccessClipboard, True)
         browser.settings().setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanOpenWindows, True)
         page.permissionRequested.connect(lambda p: p.grant())
         
-        # --- NEW SCROLL LOGIC ---
+        # --- SCROLL LOGIC ---
         def try_scroll():
             scroll_js = """
             (function() {
-                // Strategy 1: Find the infinite scroller specifically
                 var scroller = document.querySelector('infinite-scroller');
                 if (scroller) { 
                     scroller.scrollTop = scroller.scrollHeight;
                     return;
                 }
-
-                // Strategy 2: Find all 'conversation-container' type elements
                 var containers = document.querySelectorAll('[class*="conversation-container"], [class*="scroll-container"]');
                 if (containers.length > 0) {
                     var last = containers[containers.length - 1];
                     last.scrollTop = last.scrollHeight;
                 }
-
-                // Strategy 3: Just scroll the whole window hard
                 window.scrollTo(0, document.body.scrollHeight);
             })();
             """
             page.runJavaScript(scroll_js)
 
-        # Fire multiple times to catch lazy loading
         page.loadFinished.connect(lambda: QTimer.singleShot(2000, try_scroll))
         page.loadFinished.connect(lambda: QTimer.singleShot(5000, try_scroll))
         page.loadFinished.connect(lambda: QTimer.singleShot(8000, try_scroll))
@@ -233,7 +258,7 @@ class GeminiBrowser(QMainWindow):
     def update_all_titles(self):
         js_code = """
         (function() {
-            if (document.hidden) return null; // Don't scrape background tabs
+            if (document.hidden) return null;
 
             try {
                 var candidates = [];
@@ -315,7 +340,6 @@ class GeminiBrowser(QMainWindow):
         
         if not tab_list: return
 
-        # New JSON Structure: { "active_index": 2, "tabs": [...] }
         session_data = {
             "active_index": self.tabs.currentIndex(),
             "tabs": tab_list
@@ -335,7 +359,6 @@ class GeminiBrowser(QMainWindow):
             with open(session_file, "r") as f:
                 data = json.load(f)
                 
-                # --- BACKWARD COMPATIBILITY ---
                 if isinstance(data, list):
                     tabs = data
                     active_idx = 0
@@ -353,7 +376,6 @@ class GeminiBrowser(QMainWindow):
                     elif isinstance(item, dict):
                         self.add_new_tab(item.get("url"), item.get("title"))
                 
-                # Restore the active tab
                 if active_idx < self.tabs.count():
                     self.tabs.setCurrentIndex(active_idx)
                     
@@ -361,3 +383,12 @@ class GeminiBrowser(QMainWindow):
         except Exception as e:
             print(f"Error: {e}")
             return False
+
+if __name__ == "__main__":
+    os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--disable-gpu --disable-software-rasterizer"
+    app = QApplication(sys.argv)
+    app.setApplicationName("Gemini Station")
+    
+    window = GeminiBrowser()
+    window.showMaximized()
+    sys.exit(app.exec())
