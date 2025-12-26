@@ -3,11 +3,11 @@ import os
 import json
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QTabWidget, 
                              QToolBar, QMessageBox, QFileDialog, QMenu, 
-                             QSizePolicy, QStatusBar, QWidget, QStyle, QLineEdit)
+                             QSizePolicy, QStatusBar, QWidget, QStyle, QLineEdit, QProgressBar)
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import (QWebEngineProfile, QWebEnginePage, 
                                    QWebEngineSettings, QWebEngineScript)
-from PyQt6.QtGui import QAction, QIcon, QKeySequence, QFont, QColor
+from PyQt6.QtGui import QAction, QIcon, QKeySequence, QShortcut
 from PyQt6.QtCore import QUrl, Qt, QTimer, QSize
 
 # --- CONFIGURATION ---
@@ -51,14 +51,12 @@ class HNView(QWebEngineView):
     def contextMenuEvent(self, event):
         menu = self.createStandardContextMenu()
         
-        # Custom Actions
         open_action = QAction("Open Link in New Tab", self)
         open_action.triggered.connect(self.extract_and_open)
         
         copy_action = QAction("Copy Link Address", self)
         copy_action.triggered.connect(self.extract_and_copy)
         
-        # Insert at top
         first = menu.actions()[0] if menu.actions() else None
         if first:
             menu.insertAction(first, open_action)
@@ -94,6 +92,7 @@ class HNBrowser(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle(APP_NAME)
+        # Default size, but will be overridden by showMaximized()
         self.resize(1200, 800)
         
         icon_path = get_asset_path("hn.ico") 
@@ -105,7 +104,7 @@ class HNBrowser(QMainWindow):
         self.profile = QWebEngineProfile(PROFILE_NAME, self)
         self.profile.setPersistentStoragePath(profile_path)
         self.profile.setPersistentCookiesPolicy(QWebEngineProfile.PersistentCookiesPolicy.ForcePersistentCookies)
-
+        
         self.inject_scripts()
 
         # Tabs
@@ -114,279 +113,158 @@ class HNBrowser(QMainWindow):
         self.tabs.setTabsClosable(True)
         self.tabs.setMovable(True)             
         self.tabs.tabCloseRequested.connect(self.close_tab)
-        self.tabs.currentChanged.connect(lambda _i: self._sync_urlbar_with_current_tab())
+        self.tabs.currentChanged.connect(self.handle_tab_change)
         self.setCentralWidget(self.tabs)
 
         # Status Bar
-        self.setStatusBar(QStatusBar())
+        self.status_bar = QStatusBar()
+        self.setStatusBar(self.status_bar)
+        
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setMaximumWidth(120)
+        self.progress_bar.setMaximumHeight(18)
+        self.progress_bar.setVisible(False)
+        self.status_bar.addPermanentWidget(self.progress_bar)
 
-        # --- MODERN TOOLBAR SETUP ---
+        # Toolbar
         toolbar = QToolBar("Navigation")
         toolbar.setIconSize(QSize(20, 20))
         toolbar.setMovable(False)
         self.addToolBar(toolbar)
-        
-        # Style the toolbar for a "Modern" look
         self.setStyleSheet("""
-            QToolBar {
-                background: #f6f6ef; /* HN Beige */
-                border-bottom: 2px solid #ff6600; /* HN Orange */
-                spacing: 8px;
-                padding: 5px;
-            }
-            QToolButton {
-                background: transparent;
-                border: none;
-                border-radius: 4px;
-                padding: 4px;
-                color: #333;
-            }
-            QToolButton:hover {
-                background: #e5e5e5;
-            }
+            QToolBar { background: #f6f6ef; border-bottom: 2px solid #ff6600; spacing: 8px; padding: 5px; }
+            QToolButton { background: transparent; border: none; border-radius: 4px; padding: 4px; color: #333; }
+            QToolButton:hover { background: #e5e5e5; }
             QTabWidget::pane { border: 0; }
         """)
 
-        # Standard Icons
         style = self.style()
         
-        # Back
-        btn_back = QAction(style.standardIcon(QStyle.StandardPixmap.SP_ArrowBack), "Back", self)
-        btn_back.triggered.connect(lambda: self.tabs.currentWidget().back())
-        toolbar.addAction(btn_back)
-
-        # Refresh
-        btn_refresh = QAction(style.standardIcon(QStyle.StandardPixmap.SP_BrowserReload), "Refresh", self)
-        btn_refresh.setShortcut(QKeySequence("Ctrl+R"))
-        btn_refresh.triggered.connect(lambda: self.tabs.currentWidget().reload())
-        toolbar.addAction(btn_refresh)
-
-        # Home
-        btn_home = QAction(style.standardIcon(QStyle.StandardPixmap.SP_DirHomeIcon), "Home", self)
-        btn_home.triggered.connect(lambda: self.tabs.currentWidget().setUrl(QUrl(HOME_URL)))
-        toolbar.addAction(btn_home)
-
-        # New Tab (Ctrl+T)
-        btn_new_tab = QAction(style.standardIcon(QStyle.StandardPixmap.SP_FileDialogNewFolder), "New Tab", self)
-        btn_new_tab.setShortcut(QKeySequence("Ctrl+T"))
-        btn_new_tab.triggered.connect(self.open_new_tab)
-        toolbar.addAction(btn_new_tab)
+        # Actions
+        toolbar.addAction(QAction(style.standardIcon(QStyle.StandardPixmap.SP_ArrowBack), "Back", self, triggered=lambda: self.tabs.currentWidget().back()))
+        toolbar.addAction(QAction(style.standardIcon(QStyle.StandardPixmap.SP_BrowserReload), "Refresh", self, triggered=lambda: self.tabs.currentWidget().reload()))
+        toolbar.addAction(QAction(style.standardIcon(QStyle.StandardPixmap.SP_DirHomeIcon), "Home", self, triggered=lambda: self.tabs.currentWidget().setUrl(QUrl(HOME_URL))))
+        toolbar.addAction(QAction(style.standardIcon(QStyle.StandardPixmap.SP_FileDialogNewFolder), "New Tab", self, triggered=self.open_new_tab))
         
-        # Dark Mode Toggle (default: light mode)
-        self.dark_mode_on = False
-        self.btn_dark = QAction("🌙", self)
-        self.btn_dark.setToolTip("Enable Dark Mode")
-        self.btn_dark.triggered.connect(self.toggle_dark_mode)
-        toolbar.addAction(self.btn_dark)
-
         # URL Bar
         self.urlbar = QLineEdit(self)
-        self.urlbar.setPlaceholderText("Type a URL and press Enter")
+        self.urlbar.setPlaceholderText("Search or enter address")
         self.urlbar.returnPressed.connect(self.navigate_to_typed_url)
         self.urlbar.setClearButtonEnabled(True)
-        self.urlbar.setMinimumWidth(450)
+        self.urlbar.setMinimumWidth(400)
         toolbar.addWidget(self.urlbar)
 
-        # Spacer
-        spacer = QWidget()
-        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        # Shortcuts
+        QShortcut(QKeySequence("Ctrl+L"), self, lambda: self.urlbar.setFocus() or self.urlbar.selectAll())
+        QShortcut(QKeySequence("Alt+D"), self, lambda: self.urlbar.setFocus() or self.urlbar.selectAll())
+        QShortcut(QKeySequence("Ctrl+R"), self, lambda: self.tabs.currentWidget().reload())
+        QShortcut(QKeySequence("Ctrl+T"), self, self.open_new_tab)
+        QShortcut(QKeySequence("Ctrl+W"), self, lambda: self.close_tab(self.tabs.currentIndex()))
+
+        # Zoom
+        spacer = QWidget(); spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         toolbar.addWidget(spacer)
+        toolbar.addAction(QAction(" A- ", self, triggered=lambda: self.change_zoom(-0.1)))
+        toolbar.addAction(QAction(" A+ ", self, triggered=lambda: self.change_zoom(0.1)))
 
-        # Zoom Controls
-        btn_zoom_out = QAction(" A- ", self)
-        btn_zoom_out.triggered.connect(lambda: self.change_zoom(-0.1))
-        toolbar.addAction(btn_zoom_out)
-
-        btn_zoom_in = QAction(" A+ ", self)
-        btn_zoom_in.triggered.connect(lambda: self.change_zoom(0.1))
-        toolbar.addAction(btn_zoom_in)
-
-        # Start
-        if not self.load_session():
-            self.add_new_tab(HOME_URL)
-
-        self._sync_urlbar_with_current_tab()
+        # --- FIX: DELAYED SESSION LOAD ---
+        # Instead of loading immediately, we wait 100ms for the window to actually show up.
+        # This ensures the tabs are created at the correct Maximized size.
+        QTimer.singleShot(100, self.post_init_setup)
 
         self.save_timer = QTimer()
         self.save_timer.timeout.connect(self.save_session)
         self.save_timer.start(5000) 
 
-    def change_zoom(self, delta):
-        curr = self.tabs.currentWidget()
-        if curr:
-            curr.setZoomFactor(curr.zoomFactor() + delta)
-
-    def open_new_tab(self):
-        self.add_new_tab(HOME_URL)
-        if hasattr(self, "urlbar") and self.urlbar:
-            self.urlbar.setFocus()
-            self.urlbar.selectAll()
-
-    def _current_view(self) -> QWebEngineView | None:
-        w = self.tabs.currentWidget()
-        if isinstance(w, QWebEngineView):
-            return w
-        return None
-
-    def _sync_urlbar_with_current_tab(self):
-        view = self._current_view()
-        if not view or not hasattr(self, "urlbar"):
-            return
-        try:
-            self.urlbar.blockSignals(True)
-            self.urlbar.setText(view.url().toString())
-        finally:
-            self.urlbar.blockSignals(False)
-
-    def navigate_to_typed_url(self):
-        view = self._current_view()
-        if not view:
-            return
-
-        text = self.urlbar.text().strip()
-        if not text:
-            return
-
-        qurl = QUrl.fromUserInput(text)
-        if qurl.isValid():
-            view.setUrl(qurl)
+    def post_init_setup(self):
+        # This runs after the window is visible
+        if not self.load_session():
+            self.add_new_tab(HOME_URL)
+        # Ensure the first tab URL is synced
+        self.handle_tab_change(0)
 
     def inject_scripts(self):
-        # Click Tracker
-        js1 = """
-        (function() {
-            document.addEventListener("contextmenu", function(e){
-                window._lastClickPath = e.composedPath();
-            }, true);
-        })();
-        """
         s1 = QWebEngineScript()
-        s1.setSourceCode(js1)
+        s1.setSourceCode("document.addEventListener('contextmenu', e => window._lastClickPath = e.composedPath(), true);")
         s1.setName("ClickTracker")
         s1.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)
         s1.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentCreation)
         self.profile.scripts().insert(s1)
 
-    def _dark_mode_js(self, enabled: bool) -> str:
-        if enabled:
-            # Keeps the header Orange (#ff6600) but darkens the body nicely
-            return """
-            (function() {
-                var existing = document.getElementById('hn-dark-mode');
-                if (existing) return;
-                var style = document.createElement('style');
-                style.id = 'hn-dark-mode';
-                style.textContent = `
-                    /* Main Background */
-                    body { background-color: #1c1c1c !important; color: #c9d1d9 !important; }
-                    table { background-color: transparent !important; }
+    def handle_tab_change(self, index):
+        if index < 0: return
+        view = self.tabs.widget(index)
+        if isinstance(view, QWebEngineView):
+            self.urlbar.setText(view.url().toString())
+            try:
+                view.loadProgress.disconnect()
+                view.loadStarted.disconnect()
+                view.loadFinished.disconnect()
+            except: pass
+            
+            view.loadProgress.connect(self.progress_bar.setValue)
+            view.loadStarted.connect(lambda: self.progress_bar.setVisible(True))
+            view.loadFinished.connect(lambda: self.progress_bar.setVisible(False))
 
-                    /* The Main Container Table */
-                    #hnmain { background-color: #1c1c1c !important; }
-
-                    /* Header (Preserve Orange, but fix text) */
-                    #hnmain > tbody > tr:first-child > td { background-color: #ff6600 !important; }
-
-                    /* Links */
-                    a:link, a:visited { color: #c9d1d9 !important; }
-                    a.storylink { color: #ffffff !important; font-weight: 500; }
-                    a:hover { color: #ff6600 !important; text-decoration: underline; }
-
-                    /* Comments & Meta Info */
-                    .sitestr { color: #8b949e !important; }
-                    .subtext, .subtext a, .comhead, .comhead a { color: #8b949e !important; }
-
-                    /* Input Fields */
-                    textarea, input {
-                        background-color: #0d1117 !important;
-                        color: #c9d1d9 !important;
-                        border: 1px solid #30363d;
-                        padding: 5px;
-                    }
-
-                    /* Vote Arrows (Invert to make them visible on dark) */
-                    .votearrow { filter: invert(70%); }
-
-                    /* Code Blocks */
-                    pre { background-color: #0d1117; padding: 10px; border-radius: 5px; overflow-x: auto; }
-                `;
-                document.head.appendChild(style);
-            })();
-            """
-        return """
-        (function() {
-            var existing = document.getElementById('hn-dark-mode');
-            if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
-        })();
-        """
-
-    def _apply_dark_mode_to_view(self, view: QWebEngineView | None):
-        if not view:
-            return
-        try:
-            view.page().runJavaScript(self._dark_mode_js(self.dark_mode_on))
-        except Exception:
-            pass
-
-    def _apply_dark_mode_to_all_tabs(self):
-        for i in range(self.tabs.count()):
-            self._apply_dark_mode_to_view(self.tabs.widget(i))
-
-    def toggle_dark_mode(self):
-        self.dark_mode_on = not self.dark_mode_on
-        if self.dark_mode_on:
-            self.btn_dark.setText("☀️")
-            self.btn_dark.setToolTip("Disable Dark Mode")
+    def navigate_to_typed_url(self):
+        view = self.tabs.currentWidget()
+        if not view: return
+        text = self.urlbar.text().strip()
+        if "." not in text and " " in text:
+            view.setUrl(QUrl(f"https://www.google.com/search?q={text}"))
         else:
-            self.btn_dark.setText("🌙")
-            self.btn_dark.setToolTip("Enable Dark Mode")
+            view.setUrl(QUrl.fromUserInput(text))
 
-        self._apply_dark_mode_to_all_tabs()
+    def change_zoom(self, delta):
+        if self.tabs.currentWidget():
+            self.tabs.currentWidget().setZoomFactor(self.tabs.currentWidget().zoomFactor() + delta)
+
+    def open_new_tab(self):
+        self.add_new_tab(HOME_URL)
+        self.urlbar.setFocus()
+        self.urlbar.selectAll()
 
     def add_new_tab(self, url=HOME_URL, title="Loading..."):
         browser = HNView(self)
         
-        # FIX RESIZE
+        # --- RESIZE LOGIC ---
+        # Since we delay loading until the window is visible (thanks to post_init_setup),
+        # self.tabs.size() will now return the correct LARGE dimensions (e.g., 1920x1000)
+        # instead of the tiny default. This fixes the glitch.
         browser.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        if self.tabs.size().isValid():
-            browser.resize(self.tabs.size())
+        
+        if self.tabs.isVisible() and self.tabs.width() > 100:
+             browser.resize(self.tabs.size())
+        else:
+             # Fallback if somehow still hidden
+             browser.resize(1200, 800)
             
         page = HNPage(self.profile, self)
-        
         browser.settings().setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanAccessClipboard, True)
         browser.settings().setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanOpenWindows, True)
         
         page.permissionRequested.connect(lambda p: p.grant())
-        page.linkHovered.connect(lambda u: self.statusBar().showMessage(u))
+        page.linkHovered.connect(lambda u: self.status_bar.showMessage(u))
 
         browser.setPage(page)
         browser.setUrl(QUrl(url))
-        browser.urlChanged.connect(lambda u, b=browser: self._sync_urlbar_with_current_tab() if b is self._current_view() else None)
-        browser.loadFinished.connect(lambda _ok, b=browser: self._apply_dark_mode_to_view(b))
-        browser.titleChanged.connect(lambda t, b=browser: self.set_tab_title(b, t))
+        browser.urlChanged.connect(lambda u: self.urlbar.setText(u.toString()) if browser == self.tabs.currentWidget() else None)
+        browser.titleChanged.connect(lambda t: self.tabs.setTabText(self.tabs.indexOf(browser), t[:20] + "..." if len(t)>20 else t))
+
+        browser.loadProgress.connect(self.progress_bar.setValue)
+        browser.loadStarted.connect(lambda: self.progress_bar.setVisible(True))
+        browser.loadFinished.connect(lambda: self.progress_bar.setVisible(False))
 
         i = self.tabs.addTab(browser, title)
         self.tabs.setCurrentIndex(i)
         return page
 
-    def set_tab_title(self, browser, title):
-        index = self.tabs.indexOf(browser)
-        if index != -1:
-            if len(title) > 20: title = title[:20] + "..."
-            self.tabs.setTabText(index, title)
-
     def close_tab(self, i):
-        if self.tabs.count() > 1:
-            self.tabs.widget(i).deleteLater()
-            self.tabs.removeTab(i)
-        else:
-            self.close()
+        if self.tabs.count() > 1: self.tabs.removeTab(i)
+        else: self.close()
 
     def save_session(self):
-        tabs = []
-        for i in range(self.tabs.count()):
-            w = self.tabs.widget(i)
-            tabs.append({"url": w.url().toString()})
+        tabs = [{"url": self.tabs.widget(i).url().toString()} for i in range(self.tabs.count())]
         try:
             with open(get_data_path("session.json"), "w") as f:
                 json.dump({"active": self.tabs.currentIndex(), "tabs": tabs}, f)
