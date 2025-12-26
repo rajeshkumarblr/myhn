@@ -8,6 +8,8 @@ Browser clutter and context switching kill developer focus. Keeping your AI assi
 ## The Solution
 **Gemini Station** is a dedicated, lightweight (Python-based) AI cockpit. It provides a focused environment for interacting with Google Gemini, separate from your main browser.
 
+![Gemini Station Interface](assets/screenshot.png)
+
 ## Key Features
 - **Persistent Login**: Maintains your session so you don't have to log in every time.
 - **Custom User Agents**: Optimized for the best Gemini experience.
