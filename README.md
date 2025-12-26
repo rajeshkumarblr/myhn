@@ -1,28 +1,22 @@
-# Gemini Station
+# HN App
 
-A dedicated, persistent desktop workspace for Google Gemini.
+A focused, lightweight desktop wrapper for Hacker News.
 
-## The Problem
-Browser clutter and context switching kill developer focus. Keeping your AI assistant in a browser tab among dozens of others leads to distraction and lost context.
-
-## The Solution
-**Gemini Station** is a dedicated, lightweight (Python-based) AI cockpit. It provides a focused environment for interacting with Google Gemini, separate from your main browser.
-
-![Gemini Station Interface](assets/screenshot.png)
+## What it is
+This is a dedicated Hacker News browser built with Python + PyQt6 WebEngine, so you can read HN in a distraction-free window (separate from your main browser) with tab support and session persistence.
 
 ## Key Features
-- **Persistent Login**: Maintains your session so you don't have to log in every time.
-- **Custom User Agents**: Optimized for the best Gemini experience.
-- **Lightweight**: Built with Python and PyQt6, avoiding the overhead of Electron.
-- **Distraction-Free**: Clean interface with custom context menus, tab management, and auto-hiding of the "My Stuff" sidebar for pure focus.
-- **Session Restoration**: Remembers your open tabs and active chat.
+- **Tabs**: Open links in new tabs.
+- **Session Restore**: Remembers open tabs across restarts.
+- **Dark Mode**: Toggle a dark theme for reading.
+- **Lightweight**: Python + PyQt6 (no Electron).
 
 ## Installation
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/rajeshkumarblr/gemini_station.git
-    cd gemini_station
+    git clone <your-repo-url>
+    cd myhn
     ```
 
 2.  **Install dependencies:**
@@ -49,5 +43,5 @@ To build a standalone Windows executable (`.exe`):
     ```powershell
     .\build.ps1
     ```
-3.  The executable will be created at `dist/windows/GeminiStation.exe`.
+3.  The executable will be created at `dist/windows/hnapp.exe`.
 

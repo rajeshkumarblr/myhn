@@ -120,6 +120,6 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-# --- Gemini Station Specific ---
-gemini_profile/
+# --- HN App Specific ---
+hn_profile/
 session.json

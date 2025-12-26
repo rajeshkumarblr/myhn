@@ -2,19 +2,19 @@ import sys
 import os
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QIcon
-from src.gemini_station import GeminiBrowser, get_asset_path
+from src.hn_station import HNBrowser, get_asset_path
 
 if __name__ == "__main__":
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--disable-gpu --disable-software-rasterizer"
     app = QApplication(sys.argv)
-    app.setApplicationName("Gemini Station")
+    app.setApplicationName("HN App")
     
     # Set Application Icon (Important for Taskbar/Window Icon)
-    icon_path = get_asset_path("gemini.ico")
+    icon_path = get_asset_path("hn.ico")
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
     
-    window = GeminiBrowser()
+    window = HNBrowser()
     
     # 1. Start Maximized
     window.showMaximized()

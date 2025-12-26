@@ -1,4 +1,4 @@
-Write-Host "Starting Native Windows Build for Gemini Station..." -ForegroundColor Cyan
+Write-Host "Starting Native Windows Build for HN App..." -ForegroundColor Cyan
 
 # Check for Python
 if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
@@ -17,16 +17,16 @@ if (Test-Path "build") { Remove-Item -Recurse -Force "build" }
 # Build
 Write-Host "Running PyInstaller..." -ForegroundColor Yellow
 pyinstaller main.py `
-    --name="GeminiStation" `
+    --name="hnapp" `
     --onefile `
     --windowed `
     --clean `
-    --icon="assets/gemini.ico" `
+    --icon="assets/hn.ico" `
     --add-data="assets;assets" `
     --distpath="dist/windows"
 
 if ($LASTEXITCODE -eq 0) {
-    Write-Host "Build Success! Executable is located at: dist/windows/GeminiStation.exe" -ForegroundColor Green
+    Write-Host "Build Success! Executable is located at: dist/windows/hnapp.exe" -ForegroundColor Green
 } else {
     Write-Error "Build Failed."
 }
