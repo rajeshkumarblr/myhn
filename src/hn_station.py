@@ -11,7 +11,7 @@ from PyQt6.QtGui import QAction, QIcon, QKeySequence, QShortcut
 from PyQt6.QtCore import QUrl, Qt, QTimer, QSize
 
 # --- CONFIGURATION ---
-APP_NAME = "HN App"
+APP_NAME = "HN Station"
 HOME_URL = "https://news.ycombinator.com/"
 PROFILE_NAME = "HN_Profile"
 

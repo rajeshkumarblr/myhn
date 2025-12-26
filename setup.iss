@@ -6,9 +6,6 @@
 #define MyAppExeName "HackerStation.exe"
 
 [Setup]
-; NOTE: The value of AppId uniquely identifies this application.
-; Do not use the same AppId value in installers for other applications.
-; (To generate a new GUID, click Tools | Generate GUID inside the Inno Setup Compiler)
 AppId={{A1B2C3D4-E5F6-7890-1234-56789ABCDEF0}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
@@ -18,16 +15,16 @@ AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
 DisableProgramGroupPage=yes
-; This makes the installer look modern
 WizardStyle=modern
-; Where to output the final setup.exe
 OutputDir=dist
 OutputBaseFilename=HackerStation-Setup
-; Icon for the installer itself
 SetupIconFile=assets\hn.ico
 Compression=lzma
 SolidCompression=yes
-CpuAccess=64
+
+; 64-Bit Install Settings
+ArchitecturesAllowed=x64
+ArchitecturesInstallIn64BitMode=x64
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -36,11 +33,10 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-; IMPORTANT: This assumes your build.ps1 creates a FOLDER in dist/windows/
-; If you built a single file, change this to point to that file.
-Source: "dist\windows\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "dist\windows\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-; NOTE: Don't use "Flags: ignoreversion" on any shared system files
+; FIX: Added 'HackerStation\' to path
+Source: "dist\windows\HackerStation\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+; FIX: Added 'Excludes' to prevent bundling your personal session data
+Source: "dist\windows\HackerStation\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "session.json,cookies.json,*.log"
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
