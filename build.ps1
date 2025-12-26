@@ -18,7 +18,6 @@ if (Test-Path "build") { Remove-Item -Recurse -Force "build" }
 Write-Host "Running PyInstaller..." -ForegroundColor Yellow
 pyinstaller main.py `
     --name="hnapp" `
-    --onefile `
     --windowed `
     --clean `
     --icon="assets/hn.ico" `

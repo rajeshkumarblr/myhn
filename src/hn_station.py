@@ -2,12 +2,13 @@ import sys
 import os
 import json
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QTabWidget, 
-                             QToolBar, QMessageBox, QFileDialog, QMenu, QSizePolicy)
+                             QToolBar, QMessageBox, QFileDialog, QMenu, 
+                             QSizePolicy, QStatusBar, QWidget)
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import (QWebEngineProfile, QWebEnginePage, 
                                    QWebEngineSettings, QWebEngineScript)
 from PyQt6.QtGui import QAction, QIcon, QKeySequence, QFont
-from PyQt6.QtCore import QUrl, Qt, QTimer, QPoint, QEventLoop
+from PyQt6.QtCore import QUrl, Qt, QTimer
 
 # --- CONFIGURATION ---
 APP_NAME = "HN App"
@@ -50,19 +51,27 @@ class HNView(QWebEngineView):
     def contextMenuEvent(self, event):
         menu = self.createStandardContextMenu()
         
+        # Custom Actions
         open_action = QAction("Open Link in New Tab", self)
         open_action.triggered.connect(self.extract_and_open)
         
-        menu.insertSeparator(menu.actions()[0])
-        menu.insertAction(menu.actions()[0], open_action)
+        copy_action = QAction("Copy Link Address", self)
+        copy_action.triggered.connect(self.extract_and_copy)
+        
+        # Insert at top
+        first = menu.actions()[0] if menu.actions() else None
+        if first:
+            menu.insertAction(first, open_action)
+            menu.insertAction(first, copy_action)
+            menu.insertSeparator(first)
+            
         menu.exec(event.globalPos())
 
-    def extract_and_open(self):
-        js_code = """
+    def get_hovered_url_js(self):
+        return """
         (function() {
             var path = window._lastClickPath;
             if (!path || path.length === 0) return "";
-
             for (var i = 0; i < Math.min(path.length, 5); i++) {
                 var el = path[i];
                 if (el.tagName === 'A' && el.href) return el.href;
@@ -70,11 +79,15 @@ class HNView(QWebEngineView):
             return "";
         })();
         """
-        self.page().runJavaScript(js_code, self.handle_extraction)
 
-    def handle_extraction(self, url):
-        if url:
-            self.main_window.add_new_tab(url)
+    def extract_and_open(self):
+        self.page().runJavaScript(self.get_hovered_url_js(), self.handle_open)
+
+    def extract_and_copy(self):
+        self.page().runJavaScript(self.get_hovered_url_js(), lambda u: QApplication.clipboard().setText(u) if u else None)
+
+    def handle_open(self, url):
+        if url: self.main_window.add_new_tab(url)
 
 # --- MAIN WINDOW ---
 class HNBrowser(QMainWindow):
@@ -87,7 +100,7 @@ class HNBrowser(QMainWindow):
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
 
-        # --- PROFILE ---
+        # Profile
         profile_path = get_data_path("web_profile")
         self.profile = QWebEngineProfile(PROFILE_NAME, self)
         self.profile.setPersistentStoragePath(profile_path)
@@ -95,7 +108,7 @@ class HNBrowser(QMainWindow):
 
         self.inject_scripts()
 
-        # Tabs Setup
+        # Tabs
         self.tabs = QTabWidget()
         self.tabs.setDocumentMode(True)
         self.tabs.setTabsClosable(True)
@@ -103,28 +116,42 @@ class HNBrowser(QMainWindow):
         self.tabs.tabCloseRequested.connect(self.close_tab)
         self.setCentralWidget(self.tabs)
 
+        # Status Bar (New!)
+        self.setStatusBar(QStatusBar())
+
         # Toolbar
         toolbar = QToolBar("Navigation")
         self.addToolBar(toolbar)
         
-        back_btn = QAction(" < ", self)
-        back_btn.triggered.connect(lambda: self.tabs.currentWidget().back())
-        toolbar.addAction(back_btn)
+        # Nav Buttons
+        for text, func in [(" < ", lambda: self.tabs.currentWidget().back()),
+                           (" ⟳ ", lambda: self.tabs.currentWidget().reload()),
+                           (" Home ", lambda: self.tabs.currentWidget().setUrl(QUrl(HOME_URL)))]:
+            a = QAction(text, self)
+            a.triggered.connect(func)
+            toolbar.addAction(a)
 
-        refresh_btn = QAction(" ⟳ ", self)
-        refresh_btn.setShortcut(QKeySequence("Ctrl+R"))
-        refresh_btn.triggered.connect(lambda: self.tabs.currentWidget().reload())
-        toolbar.addAction(refresh_btn)
-
+        # Dark Mode
         self.dark_mode_on = True
         dark_btn = QAction(" 🌙 ", self)
         dark_btn.triggered.connect(self.toggle_dark_mode)
         toolbar.addAction(dark_btn)
 
-        home_btn = QAction(" Home ", self)
-        home_btn.triggered.connect(lambda: self.tabs.currentWidget().setUrl(QUrl(HOME_URL)))
-        toolbar.addAction(home_btn)
+        # Spacer
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        toolbar.addWidget(spacer)
 
+        # Zoom Controls
+        zoom_out = QAction(" - ", self)
+        zoom_out.triggered.connect(lambda: self.change_zoom(-0.1))
+        toolbar.addAction(zoom_out)
+
+        zoom_in = QAction(" + ", self)
+        zoom_in.triggered.connect(lambda: self.change_zoom(0.1))
+        toolbar.addAction(zoom_in)
+
+        # Start
         if not self.load_session():
             self.add_new_tab(HOME_URL)
 
@@ -132,23 +159,27 @@ class HNBrowser(QMainWindow):
         self.save_timer.timeout.connect(self.save_session)
         self.save_timer.start(5000) 
 
+    def change_zoom(self, delta):
+        curr = self.tabs.currentWidget()
+        if curr:
+            curr.setZoomFactor(curr.zoomFactor() + delta)
+
     def inject_scripts(self):
-        # 1. Click Tracker
-        click_js = """
+        # Click Tracker
+        js1 = """
         (function() {
             document.addEventListener("contextmenu", function(e){
                 window._lastClickPath = e.composedPath();
             }, true);
         })();
         """
-        script1 = QWebEngineScript()
-        script1.setSourceCode(click_js)
-        script1.setName("ClickTracker")
-        script1.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)
-        script1.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentCreation)
-        self.profile.scripts().insert(script1)
-
-        # 2. Dark Mode
+        s1 = QWebEngineScript()
+        s1.setSourceCode(js1)
+        s1.setName("ClickTracker")
+        s1.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)
+        s1.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentCreation)
+        self.profile.scripts().insert(s1)
+        
         self.inject_dark_mode_script()
 
     def inject_dark_mode_script(self):
@@ -171,12 +202,12 @@ class HNBrowser(QMainWindow):
             document.head.appendChild(style);
         })();
         """
-        script = QWebEngineScript()
-        script.setSourceCode(css)
-        script.setName("DarkTheme")
-        script.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)
-        script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentReady)
-        self.profile.scripts().insert(script)
+        s = QWebEngineScript()
+        s.setSourceCode(css)
+        s.setName("DarkTheme")
+        s.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)
+        s.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentReady)
+        self.profile.scripts().insert(s)
 
     def toggle_dark_mode(self):
         self.dark_mode_on = not self.dark_mode_on
@@ -191,11 +222,7 @@ class HNBrowser(QMainWindow):
 
     def add_new_tab(self, url=HOME_URL, title="Loading..."):
         browser = HNView(self)
-        
-        # --- FIX FOR JARRING RESIZE ---
-        # 1. Expand immediately
         browser.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        # 2. Force size to match window before showing
         if self.tabs.size().isValid():
             browser.resize(self.tabs.size())
             
@@ -205,9 +232,12 @@ class HNBrowser(QMainWindow):
         browser.settings().setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanOpenWindows, True)
         
         page.permissionRequested.connect(lambda p: p.grant())
+        
+        # Connect Status Bar
+        page.linkHovered.connect(lambda u: self.statusBar().showMessage(u))
+
         browser.setPage(page)
         browser.setUrl(QUrl(url))
-        
         browser.titleChanged.connect(lambda t, b=browser: self.set_tab_title(b, t))
 
         i = self.tabs.addTab(browser, title)
@@ -232,27 +262,16 @@ class HNBrowser(QMainWindow):
         for i in range(self.tabs.count()):
             w = self.tabs.widget(i)
             tabs.append({"url": w.url().toString()})
-        
-        data = {"active": self.tabs.currentIndex(), "tabs": tabs}
         try:
             with open(get_data_path("session.json"), "w") as f:
-                json.dump(data, f)
+                json.dump({"active": self.tabs.currentIndex(), "tabs": tabs}, f)
         except: pass
 
     def load_session(self):
         try:
             with open(get_data_path("session.json"), "r") as f:
                 data = json.load(f)
-                for t in data.get("tabs", []): 
-                    self.add_new_tab(t["url"])
+                for t in data.get("tabs", []): self.add_new_tab(t["url"])
                 return True
         except: return False
 
-if __name__ == "__main__":
-    os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--disable-gpu"
-    app = QApplication(sys.argv)
-    app.setApplicationName(APP_NAME)
-    
-    window = HNBrowser()
-    window.showMaximized()
-    sys.exit(app.exec())
