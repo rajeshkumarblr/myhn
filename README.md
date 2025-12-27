@@ -1,54 +1,72 @@
-# HN Station
+# HN Station 🍊
 
-A focused, lightweight desktop wrapper for Hacker News.
-
-## What it is
-This is a dedicated Hacker News desktop app built with Python + PyQt6 WebEngine, so you can read HN in a distraction-free window (separate from your main browser) with tabs, session persistence, and keyboard shortcuts.
-
-## Screenshot
+**The Browser for the 1%.**
+A dedicated, keyboard-centric reading environment for Hacker News, built with Python & PyQt6.
 
 ![HN Station Screenshot](assets/screenshot.png)
 
-## Key Features
-- **Tabs**: Open links in new tabs.
-- **New Tab shortcut**: `Ctrl+T` opens a new tab to Hacker News.
-- **Address bar**: Type a URL and press Enter to navigate.
-- **Address bar focus**: `Ctrl+L` or `Alt+D` focuses the URL box.
-- **Progress indicator**: Shows page load progress in the status bar.
-- **Session Restore**: Remembers open tabs across restarts.
-- **Lightweight**: Python + PyQt6 (no Electron).
+## Why use this?
+Browser tabs are where productivity goes to die. 
+
+**HN Station** isolates your reading list from your Gmail/Jira clutter. It treats Hacker News threads as "Contexts," not just tabs.
+
+* **No Electron**: Uses Qt6 WebEngine. RAM efficient.
+* **No Tracking**: No Google login, no telemetry, no history syncing.
+* **Polite**: Built-in rate limiting and retry logic to respect HN's API.
+
+## ⚡ Key Features
+
+### 🚀 Smart "Dual Open"
+Right-click any story on the home page and select **"Open Article & Comments"**. 
+* Opens the article immediately.
+* Loads the HN comments in the background (delayed to prevent rate-limiting).
+* **Auto-Grouping**: The Article and Comments share the same **Color Code** and are placed next to each other.
+
+### 🎨 Visual Contexts
+Tabs are automatically color-coded by "Thread."
+* **Root Page**: Always 🍊 Orange.
+* **Threads**: Opening a link starts a new "Color Group." All child tabs (comments, external links) inherit that color.
+* Never lose track of which comments belong to which article again.
+
+### ⌨️ Vim-Style Navigation
+Navigate feeds without touching the mouse.
+* `j` : Scroll Down
+* `k` : Scroll Up
+* `Ctrl+T` : New Tab
+* `Ctrl+W` : Close Tab
+* `Ctrl+L` : Focus Address Bar
+
+### 💾 Smart Session Restore
+* **Crash Proof**: Saves your open tabs every 5 seconds.
+* **Focus Reset**: On restart, it automatically finds and focuses the "Home" tab so you can start fresh, while keeping your reading queue open in the background.
 
 ## Installation
 
-1.  **Clone the repository:**
+### Option 1: The Installer (Windows)
+Download the latest `HNStation-Setup.exe` from the releases page.
+
+### Option 2: Run from Source
+
+1.  **Clone:**
     ```bash
-    git clone https://github.com/rajeshkumarblr/myhn.git
+    git clone [https://github.com/rajeshkumarblr/myhn.git](https://github.com/rajeshkumarblr/myhn.git)
     cd myhn
     ```
 
-2.  **Install dependencies:**
+2.  **Install:**
     ```bash
     pip install -r requirements.txt
     ```
 
-3.  **Run the application:**
+3.  **Run:**
     ```bash
     python main.py
     ```
 
-## Requirements
-- Python 3.8+
-- PyQt6
-- PyQt6-WebEngine
+## Tech Stack
+* **Core**: Python 3.10+
+* **GUI**: PyQt6 (Qt 6.4+)
+* **Engine**: QtWebEngine (Chromium)
 
-## Building the Executable
-
-To build a standalone Windows executable (`.exe`):
-
-1.  Open PowerShell in the project directory.
-2.  Run the build script:
-    ```powershell
-    .\build.ps1
-    ```
-3.  The executable will be created at `dist/windows/hnapp.exe`.
-
+---
+*Built for the hackers, by a hacker.*
